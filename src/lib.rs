@@ -216,16 +216,18 @@ impl From<FileFormat> for sys::mt_kahypar_file_format_type_t {
 }
 
 /// Handle Mt-KaHyPar error struct <-> Rust error.
-unsafe fn check_status(status: sys::mt_kahypar_status_t, err: &mut sys::mt_kahypar_error_t) -> Result<()> {
+fn check_status(status: sys::mt_kahypar_status_t, err: &mut sys::mt_kahypar_error_t) -> Result<()> {
     if status == sys::mt_kahypar_status_t::SUCCESS {
         return Ok(());
     }
     let msg = if !err.msg.is_null() {
-        CStr::from_ptr(err.msg).to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(err.msg).to_string_lossy().into_owned() }
     } else {
         "<no error message>".into()
     };
-    sys::mt_kahypar_free_error_content(err);
+    unsafe {
+        sys::mt_kahypar_free_error_content(err);
+    }
     Err(Error {
         status: status.into(),
         message: msg,
@@ -303,8 +305,7 @@ impl ContextBuilder {
     pub fn build(self) -> Result<Context> {
         ensure_initialized();
 
-        let raw_ctx =
-            unsafe { sys::mt_kahypar_context_from_preset(self.preset.into()) };
+        let raw_ctx = unsafe { sys::mt_kahypar_context_from_preset(self.preset.into()) };
         if raw_ctx.is_null() {
             return Err(Error {
                 status: Status::SystemError,
@@ -332,12 +333,7 @@ impl ContextBuilder {
                 check_status(st, &mut err)?;
             }
             if let (Some(k), Some(eps), Some(obj)) = (self.k, self.epsilon, self.objective) {
-                sys::mt_kahypar_set_partitioning_parameters(
-                    raw_ctx,
-                    k,
-                    eps,
-                    obj.into(),
-                );
+                sys::mt_kahypar_set_partitioning_parameters(raw_ctx, k, eps, obj.into());
             }
         }
 
@@ -440,11 +436,9 @@ impl<'ctx> Hypergraph<'ctx> {
                 (hyperedge_indices.len() - 1) as _,
                 hyperedge_indices.as_ptr(),
                 hyperedges.as_ptr() as _,
-                hyperedge_weights
-                    .map_or(ptr::null(), |w| w.as_ptr())
+                hyperedge_weights.map_or(ptr::null(), |w| w.as_ptr())
                     as *const sys::mt_kahypar_hyperedge_weight_t,
-                vertex_weights
-                    .map_or(ptr::null(), |w| w.as_ptr())
+                vertex_weights.map_or(ptr::null(), |w| w.as_ptr())
                     as *const sys::mt_kahypar_hypernode_weight_t,
                 &mut err,
             )
@@ -499,10 +493,7 @@ impl<'ctx> Hypergraph<'ctx> {
     }
 
     /// Map onto a target graph (Steiner-tree objective).
-    pub fn map(
-        &self,
-        target: &mut TargetGraph<'ctx>,
-    ) -> Result<PartitionedHypergraph<'ctx>> {
+    pub fn map(&self, target: &mut TargetGraph<'ctx>) -> Result<PartitionedHypergraph<'ctx>> {
         ensure_initialized();
         assert_eq!(self.ctx.raw, target.ctx.raw, "context mismatch");
         let mut err = sys::mt_kahypar_error_t {
@@ -571,11 +562,7 @@ impl<'ctx> TargetGraph<'ctx> {
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
         let tg = unsafe {
-            sys::mt_kahypar_read_target_graph_from_file(
-                c_path.as_ptr(),
-                ctx.raw,
-                &mut err,
-            )
+            sys::mt_kahypar_read_target_graph_from_file(c_path.as_ptr(), ctx.raw, &mut err)
         };
         if tg.is_null() {
             return Err(Error {
@@ -610,8 +597,7 @@ impl<'ctx> TargetGraph<'ctx> {
                 num_vertices as _,
                 edges.len() as _,
                 flat.as_ptr() as _,
-                edge_weights
-                    .map_or(ptr::null(), |w| w.as_ptr())
+                edge_weights.map_or(ptr::null(), |w| w.as_ptr())
                     as *const sys::mt_kahypar_hyperedge_weight_t,
                 &mut err,
             )
@@ -663,7 +649,7 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
         let st = unsafe {
             sys::mt_kahypar_improve_partition(self.raw, self.ctx.raw, num_vcycles, &mut err)
         };
-        unsafe { check_status(st, &mut err) }
+        check_status(st, &mut err)
     }
 
     /// Improves a given mapping (using the V-cycle technique).
@@ -693,7 +679,7 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
                 &mut err,
             )
         };
-        unsafe { check_status(st, &mut err) }
+        check_status(st, &mut err)
     }
 
     /* ----- Metrics ----- */

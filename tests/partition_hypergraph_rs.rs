@@ -1,9 +1,8 @@
-//! From mt-kahypar-sc/lib/examples/partition_hypergraph.cc
+//! From mt-kahypar-upstream/lib/examples/partition_hypergraph.cc
 
-use mt_kahypar::{
-    Context, FileFormat, Hypergraph, Objective, Preset,
-};
+use mt_kahypar::{Context, FileFormat, Hypergraph, Objective, Preset};
 
+// TODO: now we get imbalance = 0.026976160602258492
 const EXPECT_IMBALANCE: f64 = 0.023682559598494413;
 const EXPECT_KM1: i32 = 224;
 const EXPECT_BLOCK_WEIGHT_0: i32 = 6225;

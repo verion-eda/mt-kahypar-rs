@@ -93,10 +93,12 @@ fn deterministic_partitioning_raw_sys_api() {
 
 unsafe fn panic_with_error(prefix: &str, error: &mut ffi::mt_kahypar_error_t) -> ! {
     let msg = if !error.msg.is_null() {
-        CStr::from_ptr(error.msg).to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(error.msg).to_string_lossy().into_owned() }
     } else {
         "<no error message>".into()
     };
-    ffi::mt_kahypar_free_error_content(error);
+    unsafe {
+        ffi::mt_kahypar_free_error_content(error);
+    }
     panic!("{}: {}", prefix, msg);
 }
