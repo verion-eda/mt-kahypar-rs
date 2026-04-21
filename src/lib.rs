@@ -16,7 +16,7 @@
 //! mt-kahypar = "0.3"
 //! ```
 //!
-//! ## Quick start
+//! ## Quick start
 //!
 //! ```no_run
 //! use mt_kahypar::*;
@@ -25,7 +25,7 @@
 //! let ctx = Context::builder()
 //!     .preset(Preset::Deterministic)
 //!     .k(4) // number of blocks
-//!     .epsilon(0.03) // 3 % imbalance
+//!     .epsilon(0.03) // 3 % imbalance
 //!     .objective(Objective::Km1)
 //!     .seed(42)
 //!     .verbose(false) // change to true to print detailed logs
@@ -48,7 +48,7 @@
 //! ## Thread‑pool control
 //!
 //! The very first `Context` creation implicitly calls [`initialize_default`],
-//! spawning an Mt‑KaHyPar thread pool with as many threads as logical CPUs.
+//! spawning an Mt‑KaHyPar thread pool with as many threads as logical CPUs.
 //! If you need finer control invoke [`initialize`] *once* **before** any other
 //! call:
 //!
@@ -56,7 +56,7 @@
 //! mt_kahypar::initialize(64, /* interleaved = */ true);
 //! ```
 //!
-//! ## Design notes & safety
+//! ## Design notes & safety
 //!
 //! - All FFI handles (`Context`, `Hypergraph`, …) own their native resources
 //!   and free them via `Drop`.
@@ -86,12 +86,15 @@ static INIT: Once = Once::new();
 
 /// Manual global initialization (optional) of thread pools.
 ///
-/// * `num_threads` — maximum number of worker threads Mt‑KaHyPar should spawn.
-/// * `interleaved` — whether NUMA interleaved allocation should be enabled.
+/// * `num_threads` - maximum number of worker threads Mt‑KaHyPar should spawn.
+/// * `interleaved` - whether NUMA interleaved allocation should be enabled.
 ///
 /// It is safe to call this at most **once** and *before* any `Context` is
 /// created.  Subsequent calls are silently ignored.
 pub fn initialize(num_threads: usize, interleaved: bool) {
+    // SAFETY: `Once` guarantees this runs exactly once. The C function has no
+    // preconditions beyond being called before other API functions, which
+    // `Once` + the `INIT` guard in every public entry point enforces.
     INIT.call_once(|| unsafe {
         sys::mt_kahypar_initialize(num_threads, interleaved);
     });
@@ -232,10 +235,18 @@ fn check_status(
         return Ok(());
     }
     let msg = if !err.msg.is_null() {
-        unsafe { CStr::from_ptr(err.msg).to_string_lossy().into_owned() }
+        // SAFETY: err.msg is non-null (checked above) and valid for msg_len
+        // bytes as populated by the C library. We use the explicit length
+        // rather than relying on null-termination.
+        unsafe {
+            let bytes =
+                std::slice::from_raw_parts(err.msg as *const u8, err.msg_len);
+            String::from_utf8_lossy(bytes).into_owned()
+        }
     } else {
         "<no error message>".into()
     };
+    // SAFETY: err was populated by the C library and is valid to free.
     unsafe {
         sys::mt_kahypar_free_error_content(err);
     }
@@ -251,13 +262,20 @@ fn check_status(
 
 /// A **partitioning context** bundles *all* algorithmic parameters.
 pub struct Context {
+    // TODO use NonNull?
     raw: *mut sys::mt_kahypar_context_t,
 }
+// SAFETY: Mt-KaHyPar's C API is designed for multi-threaded use via TBB.
+// The opaque context handle may be sent across threads; all C-level
+// synchronisation is handled internally by the library.
 unsafe impl Send for Context {}
+// SAFETY: same as Send - the library handles internal synchronisation.
 unsafe impl Sync for Context {}
 
 impl Drop for Context {
     fn drop(&mut self) {
+        // SAFETY: raw is non-null (guaranteed by construction - we reject null
+        // returns from the C API before storing) and Drop runs at most once.
         unsafe { sys::mt_kahypar_free_context(self.raw) };
     }
 }
@@ -316,44 +334,61 @@ impl ContextBuilder {
     pub fn build(self) -> Result<Context> {
         ensure_initialized();
 
-        let raw_ctx =
-            unsafe { sys::mt_kahypar_context_from_preset(self.preset.into()) };
-        if raw_ctx.is_null() {
-            return Err(Error {
-                status: Status::SystemError,
-                message: "mt_kahypar_context_from_preset returned NULL".into(),
-            });
-        }
-
-        unsafe {
-            if let Some(seed) = self.seed {
-                sys::mt_kahypar_set_seed(seed);
+        let raw_ctx = {
+            // SAFETY: the preset enum value is always valid; the function
+            // returns null only on internal allocation failure,
+            // checked immediately below.
+            let raw_ctx = unsafe {
+                sys::mt_kahypar_context_from_preset(self.preset.into())
+            };
+            if raw_ctx.is_null() {
+                return Err(Error {
+                    status: Status::SystemError,
+                    message: "mt_kahypar_context_from_preset returned NULL"
+                        .into(),
+                });
             }
-            if self.verbose {
-                let s = CString::new("1").unwrap();
-                let mut err = sys::mt_kahypar_error_t {
-                    msg: ptr::null(),
-                    msg_len: 0,
-                    status: sys::mt_kahypar_status_t::SUCCESS,
-                };
-                let st = sys::mt_kahypar_set_context_parameter(
+            raw_ctx
+        };
+
+        if let Some(seed) = self.seed {
+            // SAFETY: mt_kahypar_set_seed takes a plain usize; no
+            // preconditions.
+            unsafe { sys::mt_kahypar_set_seed(seed) };
+        }
+        if self.verbose {
+            let s = CString::new("1").unwrap();
+            let mut err = sys::mt_kahypar_error_t {
+                msg: ptr::null(),
+                msg_len: 0,
+                status: sys::mt_kahypar_status_t::SUCCESS,
+            };
+            // SAFETY: raw_ctx is non-null (checked above). s is a valid
+            // null-terminated string that outlives this call.
+            let st = unsafe {
+                sys::mt_kahypar_set_context_parameter(
                     raw_ctx,
                     sys::mt_kahypar_context_parameter_type_t::VERBOSE,
                     s.as_ptr(),
                     &mut err,
-                );
-                check_status(st, &mut err)?;
-            }
-            if let (Some(k), Some(eps), Some(obj)) =
-                (self.k, self.epsilon, self.objective)
-            {
+                )
+            };
+            check_status(st, &mut err)?;
+        }
+        // TODO this only sets if ALL of them are set?
+        if let (Some(k), Some(eps), Some(obj)) =
+            (self.k, self.epsilon, self.objective)
+        {
+            // SAFETY: raw_ctx is non-null (checked above). All arguments are
+            // plain values with no pointer aliasing concerns.
+            unsafe {
                 sys::mt_kahypar_set_partitioning_parameters(
                     raw_ctx,
                     k,
                     eps,
                     obj.into(),
-                );
-            }
+                )
+            };
         }
 
         Ok(Context { raw: raw_ctx })
@@ -370,11 +405,15 @@ pub struct Hypergraph<'ctx> {
     ctx: &'ctx Context,
     num_vertices: usize,
 }
+// SAFETY: Mt-KaHyPar's hypergraph handles are internally thread-safe.
 unsafe impl<'ctx> Send for Hypergraph<'ctx> {}
+// SAFETY: same as Send - the library handles internal synchronisation.
 unsafe impl<'ctx> Sync for Hypergraph<'ctx> {}
 
 impl<'ctx> Drop for Hypergraph<'ctx> {
     fn drop(&mut self) {
+        // SAFETY: raw is non-null (guaranteed by construction) and Drop runs
+        // at most once.
         unsafe { sys::mt_kahypar_free_hypergraph(self.raw) };
     }
 }
@@ -397,6 +436,8 @@ impl<'ctx> Hypergraph<'ctx> {
             msg_len: 0,
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
+        // SAFETY: c_path is a valid null-terminated string that outlives this
+        // call; ctx.raw is non-null (guaranteed by Context construction).
         let hg = unsafe {
             sys::mt_kahypar_read_hypergraph_from_file(
                 c_path.as_ptr(),
@@ -405,10 +446,12 @@ impl<'ctx> Hypergraph<'ctx> {
                 &mut err,
             )
         };
+        // TODO else case to prove is nonnull?
         if hg.hypergraph.is_null() {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
+                    // SAFETY: the C library always sets err.msg on failure.
                     let m =
                         CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
@@ -416,6 +459,7 @@ impl<'ctx> Hypergraph<'ctx> {
                 },
             });
         }
+        // SAFETY: hg is non-null (checked above).
         let n = unsafe { sys::mt_kahypar_num_hypernodes(hg) as usize };
         Ok(Hypergraph {
             raw: hg,
@@ -456,6 +500,9 @@ impl<'ctx> Hypergraph<'ctx> {
             msg_len: 0,
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
+        // SAFETY: ctx.raw is non-null (guaranteed by construction). All slice
+        // pointers are valid for their respective lengths. Null is passed for
+        // absent optional weight arrays, which the C API accepts.
         let hg = unsafe {
             sys::mt_kahypar_create_hypergraph(
                 ctx.raw,
@@ -474,6 +521,7 @@ impl<'ctx> Hypergraph<'ctx> {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
+                    // SAFETY: the C library always sets err.msg on failure.
                     let m =
                         CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
@@ -504,12 +552,15 @@ impl<'ctx> Hypergraph<'ctx> {
         };
         let ctx = self.ctx;
         let num_v = self.num_vertices;
+        // SAFETY: self.raw and ctx.raw are non-null (guaranteed by
+        // construction).
         let phg =
             unsafe { sys::mt_kahypar_partition(self.raw, ctx.raw, &mut err) };
         if phg.partitioned_hg.is_null() {
             return Err(Error {
                 status: Status::OtherError,
                 message: unsafe {
+                    // SAFETY: the C library always sets err.msg on failure.
                     let m =
                         CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
@@ -538,6 +589,8 @@ impl<'ctx> Hypergraph<'ctx> {
         };
         let ctx = self.ctx;
         let num_v = self.num_vertices;
+        // SAFETY: self.raw, target.raw, and ctx.raw are all non-null
+        // (guaranteed by construction). Context identity is asserted above.
         let phg = unsafe {
             sys::mt_kahypar_map(self.raw, target.raw, ctx.raw, &mut err)
         };
@@ -545,6 +598,7 @@ impl<'ctx> Hypergraph<'ctx> {
             return Err(Error {
                 status: Status::OtherError,
                 message: unsafe {
+                    // SAFETY: the C library always sets err.msg on failure.
                     let m =
                         CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
@@ -567,6 +621,7 @@ impl<'ctx> Hypergraph<'ctx> {
     }
     #[inline]
     pub fn num_edges(&self) -> usize {
+        // SAFETY: self.raw is non-null (guaranteed by construction).
         unsafe { sys::mt_kahypar_num_hyperedges(self.raw) as usize }
     }
 }
@@ -580,11 +635,15 @@ pub struct TargetGraph<'ctx> {
     raw: *mut sys::mt_kahypar_target_graph_t,
     ctx: &'ctx Context,
 }
+// SAFETY: Mt-KaHyPar's target graph handles are internally thread-safe.
 unsafe impl<'ctx> Send for TargetGraph<'ctx> {}
+// SAFETY: same as Send - the library handles internal synchronisation.
 unsafe impl<'ctx> Sync for TargetGraph<'ctx> {}
 
 impl<'ctx> Drop for TargetGraph<'ctx> {
     fn drop(&mut self) {
+        // SAFETY: raw is non-null (guaranteed by construction) and Drop runs
+        // at most once.
         unsafe { sys::mt_kahypar_free_target_graph(self.raw) };
     }
 }
@@ -599,6 +658,8 @@ impl<'ctx> TargetGraph<'ctx> {
             msg_len: 0,
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
+        // SAFETY: c_path is a valid null-terminated string that outlives this
+        // call; ctx.raw is non-null (guaranteed by construction).
         let tg = unsafe {
             sys::mt_kahypar_read_target_graph_from_file(
                 c_path.as_ptr(),
@@ -610,6 +671,7 @@ impl<'ctx> TargetGraph<'ctx> {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
+                    // SAFETY: the C library always sets err.msg on failure.
                     let m =
                         CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
@@ -635,6 +697,8 @@ impl<'ctx> TargetGraph<'ctx> {
             msg_len: 0,
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
+        // SAFETY: ctx.raw is non-null (guaranteed by construction). flat is
+        // valid for 2*edges.len() elements. Null is passed for absent weights.
         let tg = unsafe {
             sys::mt_kahypar_create_target_graph(
                 ctx.raw,
@@ -650,6 +714,7 @@ impl<'ctx> TargetGraph<'ctx> {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
+                    // SAFETY: the C library always sets err.msg on failure.
                     let m =
                         CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
@@ -671,11 +736,16 @@ pub struct PartitionedHypergraph<'ctx> {
     ctx: &'ctx Context,
     num_vertices: usize,
 }
+// SAFETY: Mt-KaHyPar's partitioned hypergraph handles are internally
+// thread-safe.
 unsafe impl<'ctx> Send for PartitionedHypergraph<'ctx> {}
+// SAFETY: same as Send - the library handles internal synchronisation.
 unsafe impl<'ctx> Sync for PartitionedHypergraph<'ctx> {}
 
 impl<'ctx> Drop for PartitionedHypergraph<'ctx> {
     fn drop(&mut self) {
+        // SAFETY: raw is non-null (guaranteed by construction) and Drop runs
+        // at most once.
         unsafe { sys::mt_kahypar_free_partitioned_hypergraph(self.raw) };
     }
 }
@@ -691,6 +761,8 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
             msg_len: 0,
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
+        // SAFETY: self.raw and self.ctx.raw are non-null (guaranteed by
+        // construction).
         let st = unsafe {
             sys::mt_kahypar_improve_partition(
                 self.raw,
@@ -720,6 +792,8 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
             msg_len: 0,
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
+        // SAFETY: self.raw, target.raw, and self.ctx.raw are all non-null
+        // (guaranteed by construction). Context identity is asserted above.
         let st = unsafe {
             sys::mt_kahypar_improve_mapping(
                 self.raw,
@@ -736,29 +810,37 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
 
     #[inline]
     pub fn imbalance(&self) -> f64 {
+        // SAFETY: self.raw and self.ctx.raw are non-null (guaranteed by
+        // construction).
         unsafe { sys::mt_kahypar_imbalance(self.raw, self.ctx.raw) }
     }
     #[inline]
     pub fn cut(&self) -> i32 {
+        // SAFETY: self.raw is non-null (guaranteed by construction).
         unsafe { sys::mt_kahypar_cut(self.raw) }
     }
     #[inline]
     pub fn km1(&self) -> i32 {
+        // SAFETY: self.raw is non-null (guaranteed by construction).
         unsafe { sys::mt_kahypar_km1(self.raw) }
     }
     #[inline]
     pub fn soed(&self) -> i32 {
+        // SAFETY: self.raw is non-null (guaranteed by construction).
         unsafe { sys::mt_kahypar_soed(self.raw) }
     }
 
     #[inline]
     pub fn num_blocks(&self) -> i32 {
+        // SAFETY: self.raw is non-null (guaranteed by construction).
         unsafe { sys::mt_kahypar_num_blocks(self.raw) }
     }
 
     /// Returns a `Vec` with partition ids, length = #nodes.
     pub fn extract_partition(&self) -> Vec<i32> {
         let mut part = vec![0; self.num_vertices];
+        // SAFETY: self.raw is non-null (guaranteed by construction). part is
+        // allocated for exactly num_vertices elements, matching the graph size.
         unsafe { sys::mt_kahypar_get_partition(self.raw, part.as_mut_ptr()) };
         part
     }
@@ -767,6 +849,8 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
     pub fn block_weights(&self) -> Vec<i32> {
         let n = self.num_blocks() as usize;
         let mut bw = vec![0; n];
+        // SAFETY: self.raw is non-null (guaranteed by construction). bw is
+        // allocated for exactly num_blocks() elements, matching the partition.
         unsafe { sys::mt_kahypar_get_block_weights(self.raw, bw.as_mut_ptr()) };
         bw
     }
