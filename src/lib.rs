@@ -1,28 +1,21 @@
-//! # mt-kahypar — (Non-official) Static & Safe Rust bindings for Mt‑KaHyPar
+//! # mt-kahypar-rs: non-official Rust bindings for Mt‑KaHyPar
 //!
-//! **mt-kahypar** provides an idiomatic, ownership‑aware interface to the
+//! **mt-kahypar-rs** provides an idiomatic, ownership‑aware interface to the
 //! high‑performance C++ *Mt‑KaHyPar* (multi‑level hypergraph partitioner)
-//! library.
+//! library. The bindings compile and link *Mt-KaHyPar* with the TBB dependency.
+//! Currently `hwloc` is a dynamic dependency (deviating from the static-only
+//! binidings approach followed before) to make use of `hwloc` thread placement.
 //!
-//! **mt-kahypar** compiles and links *Mt-KaHyPar* and TBB dependency statically
-//! inside a special namespaces.
+//! For more details check the docs or the C++ [Mt‑KaHyPar](https://github.com/kahypar/mt-kahypar)
+//! repository.
 //!
-//! ---
-//!
-//! ## Add the dependency
-//!
-//! ```toml
-//! [dependencies]
-//! mt-kahypar = "0.3"
-//! ```
-//!
-//! ## Quick start
+//! ### Example
 //!
 //! ```no_run
 //! use mt_kahypar::*;
 //!
-//! // 1. Build a partitioning context.
-//! let ctx = Context::builder()
+//! let init = Init::with_default_threads();
+//! let ctx = Context::builder(&init)
 //!     .preset(Preset::Deterministic)
 //!     .k(4) // number of blocks
 //!     .epsilon(0.03) // 3 % imbalance
@@ -31,10 +24,7 @@
 //!     .verbose(false) // change to true to print detailed logs
 //!     .build()?;
 //!
-//! // 2. Load (or construct) the hypergraph to be partitioned.
 //! let hg = Hypergraph::from_file("netlist.hgr", &ctx, FileFormat::HMetis)?;
-//!
-//! // 3. Partition it.
 //! let part = hg.partition()?;
 //!
 //! println!(
@@ -45,27 +35,16 @@
 //! # Ok::<(), mt_kahypar::Error>(())
 //! ```
 //!
-//! ## Thread‑pool control
+//! ### Notes and safety
 //!
-//! The very first `Context` creation implicitly calls [`initialize_default`],
-//! spawning an Mt‑KaHyPar thread pool with as many threads as logical CPUs.
-//! If you need finer control invoke [`initialize`] *once* **before** any other
-//! call:
-//!
-//! ```no_run
-//! mt_kahypar::initialize(64, /* interleaved = */ true);
-//! ```
-//!
-//! ## Design notes & safety
-//!
-//! - All FFI handles (`Context`, `Hypergraph`, …) own their native resources
+//! - [`Init`] is a proof token that the Mt-KaHyPar thread pool has been
+//!   initialized. [`Context::builder`] requires one, so the compiler enforces
+//!   initialization order. Duplicate [`Init::new`] calls are safe and ignored.
+//! - All FFI handles (`Context`, `Hypergraph`, ...) own their native resources
 //!   and free them via `Drop`.
 //! - Each handle stores an immutable reference to the `Context` it was created
 //!   with.  Mixing objects built from *different* contexts triggers an
 //!   assertion at the point of use.
-//!
-//! ---
-//! For more details see the docs of individual types below or the upstream [Mt‑KaHyPar](https://github.com/kahypar/mt-kahypar).
 
 /// The raw C bindings for Mt-KaHyPar.
 ///
@@ -84,34 +63,35 @@ use std::{
 
 static INIT: Once = Once::new();
 
-/// Manual global initialization (optional) of thread pools.
+/// Proof that Mt-KaHyPar's thread pool has been initialized.
 ///
-/// * `num_threads` - maximum number of worker threads Mt‑KaHyPar should spawn.
-/// * `interleaved` - whether NUMA interleaved allocation should be enabled.
-///
-/// It is safe to call this at most **once** and *before* any `Context` is
-/// created.  Subsequent calls are silently ignored.
-pub fn initialize(num_threads: usize, interleaved: bool) {
-    // SAFETY: `Once` guarantees this runs exactly once. The C function has no
-    // preconditions beyond being called before other API functions, which
-    // `Once` + the `INIT` guard in every public entry point enforces.
-    INIT.call_once(|| unsafe {
-        sys::mt_kahypar_initialize(num_threads, interleaved);
-    });
-}
+/// Construct with [`Init::new`] or [`Init::with_default_threads`] before
+/// creating any [`Context`]. Duplicate calls are safe and no-ops after the
+/// first.
+#[derive(Clone)]
+pub struct Init(());
 
-/// Like [`initialize`] but automatically picks `num_threads` equal to the
-/// number of logical CPUs.
-pub fn initialize_default() {
-    let num_threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1);
-    initialize(num_threads, true);
-}
+impl Init {
+    /// Initialize the Mt-KaHyPar thread pool.
+    ///
+    /// * `num_threads` - maximum number of worker threads to spawn.
+    /// * `interleaved` - whether NUMA interleaved allocation should be enabled.
+    pub fn new(num_threads: usize, interleaved: bool) -> Self {
+        // SAFETY: `Once` guarantees this runs exactly once. The C function has
+        // no preconditions beyond being called before other API functions which
+        // the Init proof enforces.
+        INIT.call_once(|| unsafe {
+            sys::mt_kahypar_initialize(num_threads, interleaved);
+        });
+        Init(())
+    }
 
-fn ensure_initialized() {
-    if !INIT.is_completed() {
-        initialize_default();
+    /// Initialize with as many threads as logical CPUs.
+    pub fn with_default_threads() -> Self {
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        Self::new(num_threads, true)
     }
 }
 
@@ -226,7 +206,6 @@ impl From<FileFormat> for sys::mt_kahypar_file_format_type_t {
     }
 }
 
-/// Handle Mt-KaHyPar error struct <-> Rust error.
 fn check_status(
     status: sys::mt_kahypar_status_t,
     err: &mut sys::mt_kahypar_error_t,
@@ -247,9 +226,7 @@ fn check_status(
         "<no error message>".into()
     };
     // SAFETY: err was populated by the C library and is valid to free.
-    unsafe {
-        sys::mt_kahypar_free_error_content(err);
-    }
+    unsafe { sys::mt_kahypar_free_error_content(err) };
     Err(Error {
         status: status.into(),
         message: msg,
@@ -282,7 +259,10 @@ impl Drop for Context {
 
 impl Context {
     /// Start building a [`Context`].
-    pub fn builder() -> ContextBuilder {
+    ///
+    /// Requires an [`Init`] token to prove the thread pool has been
+    /// initialized.
+    pub fn builder(_init: &Init) -> ContextBuilder {
         ContextBuilder::default()
     }
 }
@@ -314,12 +294,12 @@ impl ContextBuilder {
         self.epsilon = Some(eps);
         self
     }
-    /// The objective function used
+    /// The objective function used.
     pub fn objective(mut self, obj: Objective) -> Self {
         self.objective = Some(obj);
         self
     }
-    /// Random seed (for deterministic partitioning algorithms)
+    /// Random seed (for deterministic partitioning algorithms).
     pub fn seed(mut self, seed: usize) -> Self {
         self.seed = Some(seed);
         self
@@ -332,8 +312,6 @@ impl ContextBuilder {
 
     /// Build the context.
     pub fn build(self) -> Result<Context> {
-        ensure_initialized();
-
         let raw_ctx = {
             // SAFETY: the preset enum value is always valid; the function
             // returns null only on internal allocation failure,
@@ -429,7 +407,6 @@ impl<'ctx> Hypergraph<'ctx> {
         ctx: &'ctx Context,
         format: FileFormat,
     ) -> Result<Self> {
-        ensure_initialized();
         let c_path = CString::new(path).unwrap();
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),
@@ -488,7 +465,6 @@ impl<'ctx> Hypergraph<'ctx> {
         hyperedge_weights: Option<&[i32]>,
         vertex_weights: Option<&[i32]>,
     ) -> Result<Self> {
-        ensure_initialized();
         assert_eq!(
             hyperedge_indices.last().copied().unwrap_or(0),
             hyperedges.len(),
@@ -544,7 +520,6 @@ impl<'ctx> Hypergraph<'ctx> {
     /// Before partitioning, the number of blocks, imbalance parameter and
     /// objective function must be set in the partitioning context.
     pub fn partition(&self) -> Result<PartitionedHypergraph<'ctx>> {
-        ensure_initialized();
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),
             msg_len: 0,
@@ -580,7 +555,6 @@ impl<'ctx> Hypergraph<'ctx> {
         &self,
         target: &mut TargetGraph<'ctx>,
     ) -> Result<PartitionedHypergraph<'ctx>> {
-        ensure_initialized();
         assert_eq!(self.ctx.raw, target.ctx.raw, "context mismatch");
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),
@@ -651,7 +625,6 @@ impl<'ctx> Drop for TargetGraph<'ctx> {
 impl<'ctx> TargetGraph<'ctx> {
     /// Read from a Metis file.
     pub fn from_file(path: &str, ctx: &'ctx Context) -> Result<Self> {
-        ensure_initialized();
         let c_path = CString::new(path).unwrap();
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),
@@ -689,7 +662,6 @@ impl<'ctx> TargetGraph<'ctx> {
         edges: &[(usize, usize)],
         edge_weights: Option<&[i32]>,
     ) -> Result<Self> {
-        ensure_initialized();
         let flat: Vec<usize> =
             edges.iter().flat_map(|&(u, v)| [u, v]).collect();
         let mut err = sys::mt_kahypar_error_t {
@@ -755,7 +727,6 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
     ///
     /// note: There is no guarantee that this call will find an improvement.
     pub fn improve(&mut self, num_vcycles: usize) -> Result<()> {
-        ensure_initialized();
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),
             msg_len: 0,
@@ -785,7 +756,6 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
         target: &mut TargetGraph<'ctx>,
         num_vcycles: usize,
     ) -> Result<()> {
-        ensure_initialized();
         assert_eq!(self.ctx.raw, target.ctx.raw, "context mismatch");
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),

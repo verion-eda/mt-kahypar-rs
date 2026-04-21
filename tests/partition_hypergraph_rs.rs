@@ -1,6 +1,6 @@
 //! From mt-kahypar-upstream/lib/examples/partition_hypergraph.cc
 
-use mt_kahypar::{Context, FileFormat, Hypergraph, Objective, Preset};
+use mt_kahypar::{Context, FileFormat, Hypergraph, Init, Objective, Preset};
 
 // TODO: now we get imbalance = 0.026976160602258492
 const EXPECT_IMBALANCE: f64 = 0.023682559598494413;
@@ -10,12 +10,9 @@ const EXPECT_BLOCK_WEIGHT_1: i32 = 6527;
 
 #[test]
 fn deterministic_partitioning_rust_api() -> mt_kahypar::Result<()> {
-    // let n_threads = std::thread::available_parallelism()
-    //     .map(|n| n.get())
-    //     .unwrap_or(1);
-    // initialize(n_threads, /* interleaved = */ true);
+    let init = Init::with_default_threads();
 
-    let ctx = Context::builder()
+    let ctx = Context::builder(&init)
         .preset(Preset::Deterministic)
         .k(2)
         .epsilon(0.03)
