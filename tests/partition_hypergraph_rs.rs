@@ -1,6 +1,9 @@
 //! From mt-kahypar-upstream/lib/examples/partition_hypergraph.cc
 
-use mt_kahypar::{Context, FileFormat, Hypergraph, Init, Objective, Preset};
+use mt_kahypar::{
+    Context, FileFormat, Hypergraph, Init, Objective, PartitioningParams,
+    Preset,
+};
 
 // TODO: now we get imbalance = 0.026976160602258492
 const EXPECT_IMBALANCE: f64 = 0.023682559598494413;
@@ -14,9 +17,11 @@ fn deterministic_partitioning_rust_api() -> mt_kahypar::Result<()> {
 
     let ctx = Context::builder(&init)
         .preset(Preset::Deterministic)
-        .k(2)
-        .epsilon(0.03)
-        .objective(Objective::Km1)
+        .params(PartitioningParams {
+            k: 2,
+            epsilon: 0.03,
+            objective: Objective::Km1,
+        })
         .seed(42)
         .verbose(false)
         .build()?;

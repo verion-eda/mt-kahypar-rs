@@ -267,13 +267,20 @@ impl Context {
     }
 }
 
+pub struct PartitioningParams {
+    /// The number of partitions.
+    pub k: i32,
+    /// The epsilon value (1+epsilon imbalance).
+    pub epsilon: f64,
+    /// The objective function used.
+    pub objective: Objective,
+}
+
 /// Fluent builder for [`Context`].  Construct via [`Context::builder`].
 #[derive(Default)]
 pub struct ContextBuilder {
     preset: Preset,
-    k: Option<i32>,
-    epsilon: Option<f64>,
-    objective: Option<Objective>,
+    params: Option<PartitioningParams>,
     seed: Option<usize>,
     verbose: bool,
 }
@@ -284,26 +291,19 @@ impl ContextBuilder {
         self.preset = p;
         self
     }
-    /// The number of partitions.
-    pub fn k(mut self, k: i32) -> Self {
-        self.k = Some(k);
+
+    /// The partitioner params.
+    pub fn params(mut self, params: PartitioningParams) -> Self {
+        self.params = Some(params);
         self
     }
-    /// The epsilon value (1+epsilon imbalance).
-    pub fn epsilon(mut self, eps: f64) -> Self {
-        self.epsilon = Some(eps);
-        self
-    }
-    /// The objective function used.
-    pub fn objective(mut self, obj: Objective) -> Self {
-        self.objective = Some(obj);
-        self
-    }
+
     /// Random seed (for deterministic partitioning algorithms).
     pub fn seed(mut self, seed: usize) -> Self {
         self.seed = Some(seed);
         self
     }
+
     /// Whether to print verbose partitioning logs to stderr.
     pub fn verbose(mut self, v: bool) -> Self {
         self.verbose = v;
@@ -353,18 +353,15 @@ impl ContextBuilder {
             };
             check_status(st, &mut err)?;
         }
-        // TODO this only sets if ALL of them are set?
-        if let (Some(k), Some(eps), Some(obj)) =
-            (self.k, self.epsilon, self.objective)
-        {
-            // SAFETY: raw_ctx is non-null (checked above). All arguments are
+        if let Some(params) = self.params {
+            // SAFETY: raw_ctx is non-null (checked above) and `params` are
             // plain values with no pointer aliasing concerns.
             unsafe {
                 sys::mt_kahypar_set_partitioning_parameters(
                     raw_ctx,
-                    k,
-                    eps,
-                    obj.into(),
+                    params.k,
+                    params.epsilon,
+                    params.objective.into(),
                 )
             };
         }
