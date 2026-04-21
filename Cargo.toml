@@ -4,11 +4,21 @@ version = "0.3.0"
 edition = "2024"
 links = "mtkahypar"
 license = "MIT OR Apache-2.0"
-authors = ["Lars Gottesbüren <lars.gottesbueren@kit.edu>", "Tobias Heuer <tobias.heuer@kit.edu>", "Nikolai Maas <nikolai.maas@kit.edu>", "Zizheng Guo <gzz_2000@126.com>"]
+authors = [
+    "Lars Gottesbüren <lars.gottesbueren@kit.edu>",
+    "Tobias Heuer <tobias.heuer@kit.edu>",
+    "Nikolai Maas <nikolai.maas@kit.edu>",
+    "Zizheng Guo <gzz_2000@126.com>",
+    "Yves Ineichen <iff@yvesineichen.com>",
+]
 description = "A statically-linked Mt-KaHyPar"
 repository = "https://github.com/verion-eda/mt-kahypar-rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lints.clippy]
+declare_interior_mutable_const = "deny"
+redundant_clone = "deny"
+disallowed_methods = "deny"
+undocumented_unsafe_blocks = "deny"
 
 [dependencies]
 
@@ -16,6 +26,4 @@ repository = "https://github.com/verion-eda/mt-kahypar-rs"
 int64_ids = []
 
 [build-dependencies]
-cc = { version = "1.2.26", features = ["parallel"] }
 cmake = "0.1"
-glob = "0.3.2"

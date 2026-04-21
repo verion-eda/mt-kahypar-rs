@@ -24,11 +24,11 @@
 //! // 1. Build a partitioning context.
 //! let ctx = Context::builder()
 //!     .preset(Preset::Deterministic)
-//!     .k(4)                 // number of blocks
-//!     .epsilon(0.03)        // 3 % imbalance
+//!     .k(4) // number of blocks
+//!     .epsilon(0.03) // 3 % imbalance
 //!     .objective(Objective::Km1)
 //!     .seed(42)
-//!     .verbose(false)       // change to true to print detailed logs
+//!     .verbose(false) // change to true to print detailed logs
 //!     .build()?;
 //!
 //! // 2. Load (or construct) the hypergraph to be partitioned.
@@ -37,7 +37,11 @@
 //! // 3. Partition it.
 //! let part = hg.partition()?;
 //!
-//! println!("cut = {} | imbalance = {}%", part.cut(), part.imbalance()*100.0);
+//! println!(
+//!     "cut = {} | imbalance = {}%",
+//!     part.cut(),
+//!     part.imbalance() * 100.0
+//! );
 //! # Ok::<(), mt_kahypar::Error>(())
 //! ```
 //!
@@ -216,7 +220,10 @@ impl From<FileFormat> for sys::mt_kahypar_file_format_type_t {
 }
 
 /// Handle Mt-KaHyPar error struct <-> Rust error.
-fn check_status(status: sys::mt_kahypar_status_t, err: &mut sys::mt_kahypar_error_t) -> Result<()> {
+fn check_status(
+    status: sys::mt_kahypar_status_t,
+    err: &mut sys::mt_kahypar_error_t,
+) -> Result<()> {
     if status == sys::mt_kahypar_status_t::SUCCESS {
         return Ok(());
     }
@@ -235,7 +242,7 @@ fn check_status(status: sys::mt_kahypar_status_t, err: &mut sys::mt_kahypar_erro
 }
 
 /* ------------------------------------------------------------------------- */
-/* Context & Builder                                                         */
+/* Context & Builder */
 /* ------------------------------------------------------------------------- */
 
 /// A **partitioning context** bundles *all* algorithmic parameters.
@@ -305,7 +312,8 @@ impl ContextBuilder {
     pub fn build(self) -> Result<Context> {
         ensure_initialized();
 
-        let raw_ctx = unsafe { sys::mt_kahypar_context_from_preset(self.preset.into()) };
+        let raw_ctx =
+            unsafe { sys::mt_kahypar_context_from_preset(self.preset.into()) };
         if raw_ctx.is_null() {
             return Err(Error {
                 status: Status::SystemError,
@@ -332,8 +340,15 @@ impl ContextBuilder {
                 );
                 check_status(st, &mut err)?;
             }
-            if let (Some(k), Some(eps), Some(obj)) = (self.k, self.epsilon, self.objective) {
-                sys::mt_kahypar_set_partitioning_parameters(raw_ctx, k, eps, obj.into());
+            if let (Some(k), Some(eps), Some(obj)) =
+                (self.k, self.epsilon, self.objective)
+            {
+                sys::mt_kahypar_set_partitioning_parameters(
+                    raw_ctx,
+                    k,
+                    eps,
+                    obj.into(),
+                );
             }
         }
 
@@ -342,7 +357,7 @@ impl ContextBuilder {
 }
 
 /* ------------------------------------------------------------------------- */
-/* Hypergraph                                                                */
+/* Hypergraph */
 /* ------------------------------------------------------------------------- */
 
 /// A (Hyper)graph to be partitioned.
@@ -363,9 +378,14 @@ impl<'ctx> Drop for Hypergraph<'ctx> {
 impl<'ctx> Hypergraph<'ctx> {
     /// Load from file (Metis / hMetis).
     ///
-    /// Note that we use different (hyper)graph data structures for different configurations.
-    /// Make sure that you partition the hypergraph with the same configuration as it is loaded.
-    pub fn from_file(path: &str, ctx: &'ctx Context, format: FileFormat) -> Result<Self> {
+    /// Note that we use different (hyper)graph data structures for different
+    /// configurations. Make sure that you partition the hypergraph with the
+    /// same configuration as it is loaded.
+    pub fn from_file(
+        path: &str,
+        ctx: &'ctx Context,
+        format: FileFormat,
+    ) -> Result<Self> {
         ensure_initialized();
         let c_path = CString::new(path).unwrap();
         let mut err = sys::mt_kahypar_error_t {
@@ -385,7 +405,8 @@ impl<'ctx> Hypergraph<'ctx> {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
-                    let m = CStr::from_ptr(err.msg).to_string_lossy().into_owned();
+                    let m =
+                        CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
                     m
                 },
@@ -399,16 +420,18 @@ impl<'ctx> Hypergraph<'ctx> {
         })
     }
 
-    /// Constructs a hypergraph from a given adjacency array that specifies the hyperedges.
+    /// Constructs a hypergraph from a given adjacency array that specifies the
+    /// hyperedges.
     ///
     /// For example:
     /// ``` text
     /// hyperedge_indices: | 0   | 2       | 6     | 9     | 12
     /// hyperedges:        | 0 2 | 0 1 3 4 | 3 4 6 | 2 5 6 |
     /// ```
-    /// Defines a hypergraph with four hyperedges, e.g., `e_0 = {0,2}, e_1 = {0,1,3,4}, ...`
-    /// `hyperedge_indices` **must** end with `hyperedges.len()`.
-    /// note: For unweighted hypergraphs, you can pass None to either hyperedge_weights or vertex_weights.
+    /// Defines a hypergraph with four hyperedges, e.g., `e_0 = {0,2}, e_1 =
+    /// {0,1,3,4}, ...` `hyperedge_indices` **must** end with
+    /// `hyperedges.len()`. note: For unweighted hypergraphs, you can pass
+    /// None to either hyperedge_weights or vertex_weights.
     pub fn from_adjacency(
         ctx: &'ctx Context,
         num_vertices: usize,
@@ -447,7 +470,8 @@ impl<'ctx> Hypergraph<'ctx> {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
-                    let m = CStr::from_ptr(err.msg).to_string_lossy().into_owned();
+                    let m =
+                        CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
                     m
                 },
@@ -462,9 +486,11 @@ impl<'ctx> Hypergraph<'ctx> {
 
     /* ------------ Partitioning & Mapping ---------------- */
 
-    /// Partitions a (hyper)graph with the configuration specified in the partitioning context.
+    /// Partitions a (hyper)graph with the configuration specified in the
+    /// partitioning context.
     ///
-    /// Before partitioning, the number of blocks, imbalance parameter and objective function must be set in the partitioning context.
+    /// Before partitioning, the number of blocks, imbalance parameter and
+    /// objective function must be set in the partitioning context.
     pub fn partition(&self) -> Result<PartitionedHypergraph<'ctx>> {
         ensure_initialized();
         let mut err = sys::mt_kahypar_error_t {
@@ -474,12 +500,14 @@ impl<'ctx> Hypergraph<'ctx> {
         };
         let ctx = self.ctx;
         let num_v = self.num_vertices;
-        let phg = unsafe { sys::mt_kahypar_partition(self.raw, ctx.raw, &mut err) };
+        let phg =
+            unsafe { sys::mt_kahypar_partition(self.raw, ctx.raw, &mut err) };
         if phg.partitioned_hg.is_null() {
             return Err(Error {
                 status: Status::OtherError,
                 message: unsafe {
-                    let m = CStr::from_ptr(err.msg).to_string_lossy().into_owned();
+                    let m =
+                        CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
                     m
                 },
@@ -493,7 +521,10 @@ impl<'ctx> Hypergraph<'ctx> {
     }
 
     /// Map onto a target graph (Steiner-tree objective).
-    pub fn map(&self, target: &mut TargetGraph<'ctx>) -> Result<PartitionedHypergraph<'ctx>> {
+    pub fn map(
+        &self,
+        target: &mut TargetGraph<'ctx>,
+    ) -> Result<PartitionedHypergraph<'ctx>> {
         ensure_initialized();
         assert_eq!(self.ctx.raw, target.ctx.raw, "context mismatch");
         let mut err = sys::mt_kahypar_error_t {
@@ -503,12 +534,15 @@ impl<'ctx> Hypergraph<'ctx> {
         };
         let ctx = self.ctx;
         let num_v = self.num_vertices;
-        let phg = unsafe { sys::mt_kahypar_map(self.raw, target.raw, ctx.raw, &mut err) };
+        let phg = unsafe {
+            sys::mt_kahypar_map(self.raw, target.raw, ctx.raw, &mut err)
+        };
         if phg.partitioned_hg.is_null() {
             return Err(Error {
                 status: Status::OtherError,
                 message: unsafe {
-                    let m = CStr::from_ptr(err.msg).to_string_lossy().into_owned();
+                    let m =
+                        CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
                     m
                 },
@@ -534,7 +568,7 @@ impl<'ctx> Hypergraph<'ctx> {
 }
 
 /* ------------------------------------------------------------------------- */
-/* TargetGraph                                                               */
+/* TargetGraph */
 /* ------------------------------------------------------------------------- */
 
 /// Target graph. See [`sys::mt_kahypar_map`].
@@ -562,13 +596,18 @@ impl<'ctx> TargetGraph<'ctx> {
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
         let tg = unsafe {
-            sys::mt_kahypar_read_target_graph_from_file(c_path.as_ptr(), ctx.raw, &mut err)
+            sys::mt_kahypar_read_target_graph_from_file(
+                c_path.as_ptr(),
+                ctx.raw,
+                &mut err,
+            )
         };
         if tg.is_null() {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
-                    let m = CStr::from_ptr(err.msg).to_string_lossy().into_owned();
+                    let m =
+                        CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
                     m
                 },
@@ -585,7 +624,8 @@ impl<'ctx> TargetGraph<'ctx> {
         edge_weights: Option<&[i32]>,
     ) -> Result<Self> {
         ensure_initialized();
-        let flat: Vec<usize> = edges.iter().flat_map(|&(u, v)| [u, v]).collect();
+        let flat: Vec<usize> =
+            edges.iter().flat_map(|&(u, v)| [u, v]).collect();
         let mut err = sys::mt_kahypar_error_t {
             msg: ptr::null(),
             msg_len: 0,
@@ -606,7 +646,8 @@ impl<'ctx> TargetGraph<'ctx> {
             return Err(Error {
                 status: Status::InvalidInput,
                 message: unsafe {
-                    let m = CStr::from_ptr(err.msg).to_string_lossy().into_owned();
+                    let m =
+                        CStr::from_ptr(err.msg).to_string_lossy().into_owned();
                     sys::mt_kahypar_free_error_content(&mut err);
                     m
                 },
@@ -617,7 +658,7 @@ impl<'ctx> TargetGraph<'ctx> {
 }
 
 /* ------------------------------------------------------------------------- */
-/* PartitionedHypergraph                                                     */
+/* PartitionedHypergraph */
 /* ------------------------------------------------------------------------- */
 
 /// A partitioned hypergraph.
@@ -647,7 +688,12 @@ impl<'ctx> PartitionedHypergraph<'ctx> {
             status: sys::mt_kahypar_status_t::SUCCESS,
         };
         let st = unsafe {
-            sys::mt_kahypar_improve_partition(self.raw, self.ctx.raw, num_vcycles, &mut err)
+            sys::mt_kahypar_improve_partition(
+                self.raw,
+                self.ctx.raw,
+                num_vcycles,
+                &mut err,
+            )
         };
         check_status(st, &mut err)
     }

@@ -14,7 +14,8 @@ pub struct max_align_t {
 }
 #[test]
 fn bindgen_test_layout_max_align_t() {
-    const UNINIT: ::std::mem::MaybeUninit<max_align_t> = ::std::mem::MaybeUninit::uninit();
+    const UNINIT: ::std::mem::MaybeUninit<max_align_t> =
+        ::std::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<max_align_t>(),
@@ -27,12 +28,18 @@ fn bindgen_test_layout_max_align_t() {
         "Alignment of max_align_t"
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).__clang_max_align_nonce1) as usize - ptr as usize },
+        unsafe {
+            ::std::ptr::addr_of!((*ptr).__clang_max_align_nonce1) as usize
+                - ptr as usize
+        },
         0usize,
         "Offset of field: max_align_t::__clang_max_align_nonce1"
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).__clang_max_align_nonce2) as usize - ptr as usize },
+        unsafe {
+            ::std::ptr::addr_of!((*ptr).__clang_max_align_nonce2) as usize
+                - ptr as usize
+        },
         16usize,
         "Offset of field: max_align_t::__clang_max_align_nonce2"
     );
@@ -80,7 +87,8 @@ pub struct mt_kahypar_error_t {
 }
 #[test]
 fn bindgen_test_layout_mt_kahypar_error_t() {
-    const UNINIT: ::std::mem::MaybeUninit<mt_kahypar_error_t> = ::std::mem::MaybeUninit::uninit();
+    const UNINIT: ::std::mem::MaybeUninit<mt_kahypar_error_t> =
+        ::std::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<mt_kahypar_error_t>(),
@@ -147,7 +155,9 @@ fn bindgen_test_layout_mt_kahypar_hypergraph_t() {
         "Alignment of mt_kahypar_hypergraph_t"
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).hypergraph) as usize - ptr as usize },
+        unsafe {
+            ::std::ptr::addr_of!((*ptr).hypergraph) as usize - ptr as usize
+        },
         0usize,
         "Offset of field: mt_kahypar_hypergraph_t::hypergraph"
     );
@@ -179,7 +189,9 @@ fn bindgen_test_layout_mt_kahypar_hypergraph_const_t() {
         "Alignment of mt_kahypar_hypergraph_const_t"
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).hypergraph) as usize - ptr as usize },
+        unsafe {
+            ::std::ptr::addr_of!((*ptr).hypergraph) as usize - ptr as usize
+        },
         0usize,
         "Offset of field: mt_kahypar_hypergraph_const_t::hypergraph"
     );
@@ -216,7 +228,9 @@ fn bindgen_test_layout_mt_kahypar_partitioned_hypergraph_t() {
         "Alignment of mt_kahypar_partitioned_hypergraph_t"
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).partitioned_hg) as usize - ptr as usize },
+        unsafe {
+            ::std::ptr::addr_of!((*ptr).partitioned_hg) as usize - ptr as usize
+        },
         0usize,
         "Offset of field: mt_kahypar_partitioned_hypergraph_t::partitioned_hg"
     );
@@ -234,8 +248,9 @@ pub struct mt_kahypar_partitioned_hypergraph_const_t {
 }
 #[test]
 fn bindgen_test_layout_mt_kahypar_partitioned_hypergraph_const_t() {
-    const UNINIT: ::std::mem::MaybeUninit<mt_kahypar_partitioned_hypergraph_const_t> =
-        ::std::mem::MaybeUninit::uninit();
+    const UNINIT: ::std::mem::MaybeUninit<
+        mt_kahypar_partitioned_hypergraph_const_t,
+    > = ::std::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<mt_kahypar_partitioned_hypergraph_const_t>(),
@@ -248,7 +263,9 @@ fn bindgen_test_layout_mt_kahypar_partitioned_hypergraph_const_t() {
         "Alignment of mt_kahypar_partitioned_hypergraph_const_t"
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).partitioned_hg) as usize - ptr as usize },
+        unsafe {
+            ::std::ptr::addr_of!((*ptr).partitioned_hg) as usize - ptr as usize
+        },
         0usize,
         "Offset of field: mt_kahypar_partitioned_hypergraph_const_t::partitioned_hg"
     );
@@ -338,7 +355,9 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
-    pub fn mt_kahypar_get_preset(context: *const mt_kahypar_context_t) -> mt_kahypar_preset_type_t;
+    pub fn mt_kahypar_get_preset(
+        context: *const mt_kahypar_context_t,
+    ) -> mt_kahypar_preset_type_t;
 }
 unsafe extern "C" {
     #[doc = " Get number of blocks. Result is unspecified if not previously initialized."]
@@ -352,8 +371,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     #[doc = " Get objective function. Result is unspecified if not previously initialized."]
-    pub fn mt_kahypar_get_objective(context: *const mt_kahypar_context_t)
-    -> mt_kahypar_objective_t;
+    pub fn mt_kahypar_get_objective(
+        context: *const mt_kahypar_context_t,
+    ) -> mt_kahypar_objective_t;
 }
 unsafe extern "C" {
     #[doc = " Initializes the random number generator with the given seed value (not thread-safe)."]
@@ -369,7 +389,10 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     #[doc = " Must be called once for global initialization, before trying to create or partition any (hyper)graph.\n\n Note: if 'num_threads' is larger than the number of actually available CPUs, only a reduced number of threads will be used."]
-    pub fn mt_kahypar_initialize(num_threads: usize, interleaved_allocations: bool);
+    pub fn mt_kahypar_initialize(
+        num_threads: usize,
+        interleaved_allocations: bool,
+    );
 }
 unsafe extern "C" {
     #[doc = " Frees the content of the error."]
@@ -434,7 +457,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     #[doc = " Deletes a target graph object."]
-    pub fn mt_kahypar_free_target_graph(target_graph: *mut mt_kahypar_target_graph_t);
+    pub fn mt_kahypar_free_target_graph(
+        target_graph: *mut mt_kahypar_target_graph_t,
+    );
 }
 unsafe extern "C" {
     #[doc = " Returns the number of nodes of the (hyper)graph."]
@@ -450,7 +475,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     #[doc = " Returns the number of pins of the hypergraph."]
-    pub fn mt_kahypar_num_pins(hypergraph: mt_kahypar_hypergraph_t) -> mt_kahypar_hypernode_id_t;
+    pub fn mt_kahypar_num_pins(
+        hypergraph: mt_kahypar_hypergraph_t,
+    ) -> mt_kahypar_hypernode_id_t;
 }
 unsafe extern "C" {
     #[doc = " Returns the sum of all node weights of the (hyper)graph."]
@@ -549,7 +576,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     #[doc = " Removes all fixed vertices from the hypergraph."]
-    pub fn mt_kahypar_remove_fixed_vertices(hypergraph: mt_kahypar_hypergraph_t);
+    pub fn mt_kahypar_remove_fixed_vertices(
+        hypergraph: mt_kahypar_hypergraph_t,
+    );
 }
 unsafe extern "C" {
     #[doc = " Whether the corresponding node is a fixed vertex."]

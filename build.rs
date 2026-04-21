@@ -1,7 +1,9 @@
 //! this build script compiles the mt-kahypar-upstream into a static library
 
-use std::env;
-use std::path::{Path, PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 fn main() {
     println!("cargo:rerun-if-changed=mt-kahypar-upstream");
@@ -13,12 +15,14 @@ fn main() {
         .define("KAHYPAR_DOWNLOAD_TBB", "ON")
         // KAHYPAR_STATIC_LINK_TBB requires KAHYPAR_DOWNLOAD_TBB=ON
         .define("KAHYPAR_STATIC_LINK_TBB", "ON")
-        // TBB_STRICT enables -Werror in TBB's own cmake, which breaks with GCC >=15
+        // TBB_STRICT enables -Werror in TBB's own cmake, which breaks with GCC
+        // >=15
         .define("TBB_STRICT", "OFF")
         .define("KAHYPAR_USE_64_BIT_IDS", "OFF")
-        // NOTE: hwloc was disabled in the original build.rs but I want to keep it to see if we
-        // notice any performance benefit but it means adding a dynamic dependency.
-        // .define("KAHYPAR_DISABLE_HWLOC", "ON") // disable HWLOC
+        // NOTE: hwloc was disabled in the original build.rs but I want to keep
+        // it to see if we notice any performance benefit but it means
+        // adding a dynamic dependency. .define("KAHYPAR_DISABLE_HWLOC",
+        // "ON") // disable HWLOC
         .build();
 
     let build_dir = dst.join("build");
@@ -29,8 +33,9 @@ fn main() {
     );
     println!("cargo:rustc-link-lib=static=mtkahypar");
 
-    let tbb_dir = find_tbb_lib_dir(&build_dir)
-        .expect("could not find TBB static library directory after cmake build");
+    let tbb_dir = find_tbb_lib_dir(&build_dir).expect(
+        "could not find TBB static library directory after cmake build",
+    );
     println!("cargo:rustc-link-search=native={}", tbb_dir.display());
     println!("cargo:rustc-link-lib=static=tbb");
     println!("cargo:rustc-link-lib=static=tbbmalloc");

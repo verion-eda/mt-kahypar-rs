@@ -1,5 +1,5 @@
 {
-  description = "mt-kayhpar";
+  description = "mt-kahypar-rs: static rust bindings for mt-kahypar";
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
@@ -28,7 +28,6 @@
                   extensions = [
                     "clippy"
                     "rust-docs"
-                    # "rust-src"
                   ];
                 })
                 (super.rust-bin.selectLatestNightlyWith (toolchain: toolchain.rustfmt))
@@ -43,15 +42,14 @@
         };
 
         common = with pkgs; [
-          rustToolchain # Rust compiler and cargo
-          pkg-config # Build-time dependency finder
-          cargo-deny # Check dependencies for security issues
-          cargo-edit # Cargo subcommands: add, rm, upgrade
-          cargo-watch # Auto-rebuild on file changes
-          cargo-machete # Check for unused dependencies
-          rust-analyzer # LSP for IDE integration
-          rust-cbindgen # Generate C FFI bindings
-          pinact # pin gha
+          rustToolchain
+          pkg-config
+          cargo-deny
+          cargo-edit
+          cargo-watch
+          cargo-machete
+          rust-analyzer
+          pinact
           cmake
           hwloc
         ];
@@ -62,7 +60,6 @@
             stdenv.cc.cc
             zlib
             glib
-            onetbb
             hwloc
           ]
         );

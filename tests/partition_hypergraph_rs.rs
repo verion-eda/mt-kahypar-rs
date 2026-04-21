@@ -24,7 +24,8 @@ fn deterministic_partitioning_rust_api() -> mt_kahypar::Result<()> {
         .verbose(false)
         .build()?;
 
-    let hg = Hypergraph::from_file("tests/ibm01.hgr", &ctx, FileFormat::HMetis)?;
+    let hg =
+        Hypergraph::from_file("tests/ibm01.hgr", &ctx, FileFormat::HMetis)?;
 
     let phg = hg.partition()?;
 
