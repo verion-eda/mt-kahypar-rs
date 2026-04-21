@@ -49,6 +49,7 @@
           cargo-watch
           cargo-machete
           rust-analyzer
+          rust-bindgen
           pinact
           cmake
           hwloc
