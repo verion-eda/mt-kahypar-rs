@@ -8,5 +8,3 @@ comment_width = 80
 wrap_comments = true
 doc_comment_code_block_width = 80
 format_code_in_doc_comments = true
-# TODO remove once we inlined this submodule
-ignore = ["eda-infra-rs"]
