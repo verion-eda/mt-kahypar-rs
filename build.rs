@@ -41,7 +41,12 @@ fn main() {
     println!("cargo:rustc-link-lib=static=tbbmalloc");
 
     println!("cargo:rustc-link-lib=dylib=hwloc");
-    println!("cargo:rustc-link-lib=dylib=stdc++");
+    // Apple platforms ship libc++ only; there is no libstdc++ to link against.
+    let cxx_stdlib = match env::var("CARGO_CFG_TARGET_VENDOR").as_deref() {
+        Ok("apple") => "c++",
+        _ => "stdc++",
+    };
+    println!("cargo:rustc-link-lib=dylib={cxx_stdlib}");
 
     println!(
         "cargo:mtkahypar_manifest_dir={}",
