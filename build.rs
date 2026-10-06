@@ -41,13 +41,13 @@ fn main() {
     println!("cargo:rustc-link-lib=static=tbbmalloc");
 
     println!("cargo:rustc-link-lib=dylib=hwloc");
-let cxx_stdlib = match env::var("CARGO_CFG_TARGET_OS").as_deref() {
-    Ok("macos") => "c++",
-    Ok("linux") => "stdc++",
-    Ok(os) => panic!("OS ({os}) not supported!"),
-    Err(err) => panic!("no CARGO_CFG_TARGET_OS set: {err}"),
-};
-println!("cargo:rustc-link-lib=dylib={cxx_stdlib}");
+    let cxx_stdlib = match env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("macos") => "c++",
+        Ok("linux") => "stdc++",
+        Ok(os) => panic!("OS ({os}) not supported!"),
+        Err(err) => panic!("no CARGO_CFG_TARGET_OS set: {err}"),
+    };
+    println!("cargo:rustc-link-lib=dylib={cxx_stdlib}");
 
     println!(
         "cargo:mtkahypar_manifest_dir={}",
