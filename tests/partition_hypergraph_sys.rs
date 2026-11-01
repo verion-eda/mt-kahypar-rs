@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Zizheng Guo. Originally from mt-kahypar-rs (https://github.com/gzz2000/mt-kahypar-rs).
+// SPDX-FileCopyrightText: Copyright (c) 2026 Verion GmbH. Modifications to the original file.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! From mt-kahypar-sc/lib/examples/partition_hypergraph.cc
 
 use std::{
